@@ -26,7 +26,15 @@ def hello_world(book: xw.Book):
     else:
         cell.value = "Hello xlwings!"
 
-
+@script
+def tb_test(book: xw.Book):
+    sheet = book.sheets.active
+    cell = sheet["A2"]
+    if cell.value == "TB YES":
+        cell.value = "TB Download"
+    else:
+        cell.value = "TB YES"
+        
 @script
 def show_alert(book: xw.Book):
     book.app.alert("This is an alert!", title="xlwings Server Alert")
