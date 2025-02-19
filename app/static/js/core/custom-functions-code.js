@@ -2,7 +2,6 @@ const debug = false;
 let invocations = new Set();
 let bodies = new Set();
 let runtime;
-let contentLanguage;
 let socket = null;
 
 Office.onReady(function (info) {
@@ -47,9 +46,6 @@ Office.onReady(function (info) {
   } else {
     runtime = "1.1";
   }
-
-  // Content Language
-  contentLanguage = Office.context.contentLanguage;
 });
 
 function flattenVarargsArray(arr) {
@@ -166,7 +162,8 @@ async function base() {
     func_name: funcName,
     args: args,
     caller_address: `${officeApiClient}[${workbookName}]${invocation.address}`, // not available for streaming functions
-    content_language: contentLanguage,
+    culture_info_name: await xlwings.getCultureInfoName(),
+    date_format: await xlwings.getDateFormat(),
     version: "placeholder_xlwings_version",
     runtime: runtime,
   };
@@ -175,7 +172,7 @@ async function base() {
   if (isStreaming) {
     if (socket === null) {
       console.error(
-        "To enable streaming functions, you need to load the socket.io js client before xlwings.min.js and custom-functions-code",
+        "To enable streaming functions, you need to load the socket.io js client before xlwings.js and custom-functions-code",
       );
       return;
     }
@@ -257,15 +254,22 @@ async function makeServerCall(body) {
 }
 
 async function makeLiteCall(body) {
-  await xlwings.pyscriptAllDone;
+  let module_str;
+  if (config.isOfficialLiteAddin) {
+    await xlwings.pyodideReadyPromise;
+    module_str = globalThis.editorInstance.getValue();
+  } else {
+    module_str = null;
+  }
   try {
-    let result = await window.custom_functions_call(body);
+    let result = await globalThis.liteCustomFunctionsCall(body, module_str);
     if (result.error) {
       console.error(result.details);
-      throw new Error(result.error);
+      showError(result.error);
     }
     return result;
   } catch (error) {
+    console.error(error);
     showError(error);
   }
 }

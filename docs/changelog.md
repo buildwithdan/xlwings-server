@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.10.2 (Jan 19, 2025)
+
+- Fixed another issue with multi-range named ranges that caused `This operation is not permitted for the current object` error.
+
+## 0.10.1 (Jan 17, 2025)
+
+- Fixed an issue with sheet-scoped named formulas that were causing the following error message: `This operation is not permitted for the current object`.
+
+## 0.10.0 (Jan 9, 2025)
+
+- Datetime fixes both with custom scripts (day and month were misinterpreted with certain locales) and custom functions (the formatting of dates in custom functions now respects the specific format chosen on the system).
+- Added the `-e`/`--env` arg to the lite CLI command.
+- Upgraded dependencies incl. xlwings to 0.33.6.
+
+## 0.9.2 (Dec 9, 2024)
+
+- Custom functions reloading (introduced with 0.9.1) is now only done during development.
+- Fixed an issue with the `manifest.xml` when there was no function namespace used in the `prod` environment.
+
+## 0.9.1 (Dec 8, 2024)
+
+- Custom functions are now automatically reloaded every time you edit them without having to restart Excel or reloading the add-in.
+- Fixed path handling issues on Windows with `run.py` CLI and `.env`. This fixes issues with `run.py init`, dev server reloading, and loading `.env`.
+- Office.js API versions are now printed in the dev tools console.
+- Upgraded dependencies.
+
 ## 0.9.0 (Nov 27, 2024)
 
 - Launched xlwings Lite, allowing Python-based Office.js add-ins to be deployed as static websites. These add-ins run Python via WebAssembly (Wasm) in the add-in's browser engine, so Python doesn't need to be installed on neither the server nor the local machine. Learn more at [xlwings Lite](index_lite.md).

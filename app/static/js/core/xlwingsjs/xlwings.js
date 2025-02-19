@@ -1,29 +1,17 @@
 import { xlAlert } from "./alert.js";
 import { getAccessToken } from "./auth.js";
 export { getAccessToken };
-import { getActiveBookName } from "./utils.js";
-export { getActiveBookName };
+import {
+  getActiveBookName,
+  printSupportedApiVersions,
+  getCultureInfoName,
+  getDateFormat,
+} from "./utils.js";
+export { getActiveBookName, getCultureInfoName, getDateFormat };
+import { pyodideReadyPromise } from "./lite.js";
 
-let pyscriptAllDone = new Promise((resolve) => {
-  if (config.onLite === false) {
-    resolve(false);
-  } else {
-    window.addEventListener(
-      "py:all-done",
-      () => {
-        // Hide status alert when py:all-done fires
-        const globalStatusAlert = document.querySelector(
-          "#global-status-alert",
-        );
-        if (globalStatusAlert) {
-          globalStatusAlert.classList.add("d-none");
-        }
-        resolve(true);
-      },
-      { once: true },
-    );
-  }
-});
+// Prints the supported API versions into the Console
+printSupportedApiVersions();
 
 // Namespace
 const xlwings = {
@@ -32,7 +20,9 @@ const xlwings = {
   getActiveBookName,
   getBookData,
   runActions,
-  pyscriptAllDone,
+  pyodideReadyPromise,
+  getCultureInfoName,
+  getDateFormat,
 };
 globalThis.xlwings = xlwings;
 
@@ -40,15 +30,6 @@ globalThis.xlwings = xlwings;
 document.addEventListener("DOMContentLoaded", init);
 
 export function init() {
-  // Pyscript status
-  if (config.onLite) {
-    const globalStatusAlert = document.querySelector("#global-status-alert");
-    if (globalStatusAlert) {
-      globalStatusAlert.classList.remove("d-none");
-      globalStatusAlert.querySelector("span").textContent = "Loading Python...";
-    }
-  }
-
   const elements = document.querySelectorAll("[xw-click]");
   elements.forEach((element) => {
     element.addEventListener("click", async (event) => {
@@ -102,6 +83,7 @@ export async function runPython(
     exclude = "",
     headers = {},
     errorDisplayMode = "alert",
+    moduleString = "",
   } = {},
 ) {
   await Office.onReady();
@@ -119,8 +101,12 @@ export async function runPython(
       );
       let rawData;
       if (config.onLite) {
-        await pyscriptAllDone;
-        rawData = await window.custom_scripts_call(payload, scriptName);
+        await pyodideReadyPromise;
+        rawData = await globalThis.liteCustomScriptsCall(
+          payload,
+          scriptName,
+          moduleString,
+        );
         if (rawData.error) {
           console.error(rawData.details);
           throw new Error(rawData.error);
@@ -143,7 +129,7 @@ export async function runPython(
       // console.log(rawData);
 
       // Run Functions
-      // Note that PyScript returns undefined, so use != and == rather than !== and ===
+      // Note that Pyodide returns undefined, so use != and == rather than !== and ===
       if (rawData != null) {
         await runActions(rawData, context);
       }
@@ -270,19 +256,22 @@ async function getBookData(
   const namedItems = context.workbook.names.load("name, type");
   await context.sync();
 
-  namedItems.items.forEach((namedItem, ix) => {
+  for (const namedItem of namedItems.items) {
     // Currently filtering to named ranges
     if (namedItem.type === "Range") {
+      // Names pointing to multiple Ranges return null
+      let range = namedItem.getRangeOrNullObject();
+      await context.sync();
       names.push({
         name: namedItem.name,
-        sheet: namedItem.getRange().worksheet.load("position"),
-        range: namedItem.getRange().load("address"),
+        sheet: range.isNullObject ? null : range.worksheet.load("position"),
+        range: range.isNullObject ? null : range.load("address"),
         scope_sheet_name: null,
         scope_sheet_index: null,
         book_scope: true, // workbook.names contains only workbook scope!
       });
     }
-  });
+  }
 
   await context.sync();
 
@@ -290,8 +279,10 @@ async function getBookData(
   names.forEach((namedItem, ix) => {
     names2.push({
       name: namedItem.name,
-      sheet_index: namedItem.sheet.position,
-      address: namedItem.range.address.split("!").pop(),
+      sheet_index: namedItem.sheet ? namedItem.sheet.position : null,
+      address: namedItem.range
+        ? namedItem.range.address.split("!").pop()
+        : null,
       scope_sheet_name: null,
       scope_sheet_index: null,
       book_scope: namedItem.book_scope,
@@ -337,33 +328,40 @@ async function getBookData(
 
   // Names (sheet scope)
   let namesSheetScope = [];
-  sheetsLoader.forEach((item) => {
+  for (const item of sheetsLoader) {
     if (!excludeArray.includes(item["sheet"].name)) {
-      item["names"].items.forEach((namedItem) => {
-        namesSheetScope.push({
-          name: namedItem.name,
-          sheet: namedItem.getRange().worksheet.load("position"),
-          range: namedItem.getRange().load("address"),
-          scope_sheet: namedItem.worksheet.load("name, position"),
-          book_scope: false,
-        });
-      });
+      for (const namedItem of item["names"].items) {
+        // Currently filtering to named ranges
+        if (namedItem.type === "Range") {
+          let range = namedItem.getRangeOrNullObject();
+          await context.sync();
+          namesSheetScope.push({
+            name: namedItem.name,
+            sheet: range.isNullObject ? null : range.worksheet.load("position"),
+            range: range.isNullObject ? null : range.load("address"),
+            scope_sheet: namedItem.worksheet.load("name, position"),
+            book_scope: false,
+          });
+        }
+      }
     }
-  });
+  }
 
   await context.sync();
 
   let namesSheetsScope2 = [];
-  namesSheetScope.forEach((namedItem) => {
+  for (const namedItem of namesSheetScope) {
     namesSheetsScope2.push({
       name: namedItem.name,
-      sheet_index: namedItem.sheet.position,
-      address: namedItem.range.address.split("!").pop(),
+      sheet_index: namedItem.sheet ? namedItem.sheet.position : null,
+      address: namedItem.range
+        ? namedItem.range.address.split("!").pop()
+        : null,
       scope_sheet_name: namedItem.scope_sheet.name,
       scope_sheet_index: namedItem.scope_sheet.position,
       book_scope: namedItem.book_scope,
     });
-  });
+  }
 
   // Add sheet scoped names to book scoped names
   payload["names"] = payload["names"].concat(namesSheetsScope2);
@@ -584,42 +582,6 @@ Object.assign(globalThis.callbacks, funcs);
 
 // Callbacks
 async function setValues(context, action) {
-  // Handle DateTime (TODO: backend should deliver indices with datetime obj)
-  let dt;
-  let dtString;
-  action.values.forEach((valueRow, rowIndex) => {
-    valueRow.forEach((value, colIndex) => {
-      if (
-        typeof value === "string" &&
-        value.length > 18 &&
-        value.includes("T")
-      ) {
-        dt = new Date(Date.parse(value));
-        // Excel on macOS does use the wrong locale if you set a custom one via
-        // macOS Settings > Date & Time > Open Language & Region > Apps
-        // as the date format seems to stick to the Region selected under General
-        // while toLocaleDateString then respects the specific selected language.
-        // Providing Office.context.contentLanguage fixes this but isn't available for
-        // Office Scripts
-        // https://learn.microsoft.com/en-us/office/dev/add-ins/develop/localization#match-datetime-format-with-client-locale
-        dtString = dt.toLocaleDateString(Office.context.contentLanguage);
-        // Note that adding the time will format the cell as Custom instead of Date/Time
-        // which xlwings currently doesn't translate to datetime when reading
-        if (dtString !== "Invalid Date") {
-          if (
-            dt.getHours() +
-              dt.getMinutes() +
-              dt.getSeconds() +
-              dt.getMilliseconds() !==
-            0
-          ) {
-            dtString += " " + dt.toLocaleTimeString();
-          }
-          action.values[rowIndex][colIndex] = dtString;
-        }
-      }
-    });
-  });
   let range = await getRange(context, action);
   range.values = action.values;
   await context.sync();

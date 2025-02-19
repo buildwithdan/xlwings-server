@@ -32,7 +32,7 @@ def test_empty_function_namespace_prod(mocker):
     mocker.patch.object(settings, "environment", "prod")
     mocker.patch.object(settings, "functions_namespace", "")
     response = client.get(f"{settings.app_path}/manifest")
-    assert '<bt:String id="Functions.Namespace" DefaultValue="" />' in response.text
+    assert "Functions.Namespace" not in response.text
 
 
 def test_empty_function_namespace_nonprod(mocker):

@@ -15,6 +15,21 @@ import xlwings as xw
 from cryptography.fernet import Fernet
 
 is_cloud = os.getenv("CODESPACES") or os.getenv("GITPOD_WORKSPACE_ID")
+this_dir = Path(__file__).parent.resolve()
+
+
+def create_lite_settings(settings, env_file):
+    settings_map = {
+        "XLWINGS_LICENSE_KEY": f'"{settings.license_key}"',
+        "XLWINGS_ENABLE_EXAMPLES": str(settings.enable_examples).lower(),
+        "XLWINGS_ENVIRONMENT": settings.environment,
+        "XLWINGS_ENABLE_TESTS": str(settings.enable_tests).lower(),
+        "XLWINGS_FUNCTIONS_NAMESPACE": settings.functions_namespace,
+        "XLWINGS_IS_OFFICIAL_LITE_ADDIN": str(settings.is_official_lite_addin).lower(),
+    }
+
+    for key, value in settings_map.items():
+        update_lite_settings(key, value, env_file)
 
 
 def update_lite_settings(key: str, value: str, env_file: Path):
@@ -38,7 +53,7 @@ def update_lite_settings(key: str, value: str, env_file: Path):
 
 
 def replace_uuids():
-    file_path = "app/config.py"
+    file_path = this_dir / "app" / "config.py"
     with open(file_path, "r") as file:
         lines = file.readlines()
 
@@ -63,8 +78,8 @@ def replace_uuids():
 
 
 def create_dotenv():
-    if not Path(".env").exists():
-        shutil.copy(".env.template", ".env")
+    if not (this_dir / ".env").exists():
+        shutil.copy(this_dir / ".env.template", this_dir / ".env")
         insert_secret_key()
     else:
         print("Didn't create an '.env' file as one already exists.")
@@ -72,9 +87,9 @@ def create_dotenv():
 
 def insert_secret_key():
     secret_key = Fernet.generate_key().decode()
-    with open(".env", "r") as file:
+    with open(this_dir / ".env", "r") as file:
         lines = file.readlines()
-    with open(".env", "w") as file:
+    with open(this_dir / ".env", "w") as file:
         for line in lines:
             if line.startswith("XLWINGS_SECRET_KEY="):
                 file.write(f'XLWINGS_SECRET_KEY="{secret_key}"\n')
@@ -99,7 +114,7 @@ def deps_compile(upgrade=False):
     )
 
 
-def lite_build(url, output_dir, create_zip=False, clean=False):
+def lite_build(url, output_dir, create_zip=False, clean=False, environment=None):
     logging.getLogger("httpx").setLevel(logging.WARNING)
     build_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -113,10 +128,16 @@ def lite_build(url, output_dir, create_zip=False, clean=False):
     os.environ["XLWINGS_APP_PATH"] = app_path
     os.environ["XLWINGS_STATIC_URL_PATH"] = f"{app_path}/static"
 
+    if environment:
+        os.environ["XLWINGS_ENVIRONMENT"] = environment
+
     from fastapi.testclient import TestClient  # noqa: E402
 
     from app.config import settings  # noqa: E402
     from app.main import main_app  # noqa: E402
+
+    # Make sure settings is up-to-date
+    create_lite_settings(settings=settings, env_file=this_dir / "app" / "lite" / ".env")
 
     # Take the license key from .env
     os.environ["XLWINGS_LICENSE_KEY"] = settings.license_key
@@ -145,7 +166,7 @@ def lite_build(url, output_dir, create_zip=False, clean=False):
         "xlwings/custom-functions-meta.json",
         "xlwings/custom-functions-code.js",
         "xlwings/custom-scripts-sheet-buttons.js",
-        "xlwings/pyscript.json",
+        "xlwings/pyodide.json",
     ]
 
     base_path = f"{app_path}/" if app_path else "/"
@@ -181,18 +202,20 @@ def lite_build(url, output_dir, create_zip=False, clean=False):
         else:
             print(f"No {folder_name} folder found to copy")
 
-    copy_folder(Path("app/static"), output_dir / "static", "Static")
-    copy_folder(Path("app/lite"), output_dir / "lite", "lite")
+    copy_folder(this_dir / "app" / "static", output_dir / "static", "Static")
+    copy_folder(this_dir / "app" / "lite", output_dir / "lite", "lite")
     copy_folder(
-        Path("app/custom_functions"),
+        this_dir / "app" / "custom_functions",
         output_dir / "custom_functions",
         "custom_functions",
     )
     copy_folder(
-        Path("app/custom_scripts"), output_dir / "custom_scripts", "custom_scripts"
+        this_dir / "app" / "custom_scripts",
+        output_dir / "custom_scripts",
+        "custom_scripts",
     )
 
-    # Deploy key
+    # .env
     try:
         deploy_key = xlwings.pro.LicenseHandler.create_deploy_key()
     except xw.LicenseError:
@@ -200,6 +223,10 @@ def lite_build(url, output_dir, create_zip=False, clean=False):
     update_lite_settings(
         "XLWINGS_LICENSE_KEY", deploy_key, output_dir / "lite" / ".env"
     )
+    if environment:
+        update_lite_settings(
+            "XLWINGS_ENVIRONMENT", environment, output_dir / "lite" / ".env"
+        )
 
     # Remove unused libraries
     def remove_dir_if_exists(path: Path) -> None:
@@ -298,6 +325,12 @@ if __name__ == "__main__":
         help="Clean the output directory before building.",
         action="store_true",
     )
+    lite_parser.add_argument(
+        "-e",
+        "--env",
+        help="Sets the XLWINGS_ENVIRONMENT. By default uses the one from .env file.",
+        type=str,
+    )
 
     args = parser.parse_args()
 
@@ -310,30 +343,22 @@ if __name__ == "__main__":
             deps_compile(upgrade=True)
     elif args.subcommand == "lite":
         lite_build(
-            url=args.url, output_dir=args.output, create_zip=args.zip, clean=args.clean
+            url=args.url,
+            output_dir=args.output,
+            create_zip=args.zip,
+            clean=args.clean,
+            environment=args.env,
         )
     else:
         # Copy over required settings
         # TODO: This is currently only done when starting the server
         from app.config import settings  # noqa: E402
 
-        env_file = Path("app/lite/.env")
-        update_lite_settings(
-            "XLWINGS_LICENSE_KEY", f'"{settings.license_key}"', env_file
-        )
-        update_lite_settings(
-            "XLWINGS_ENABLE_EXAMPLES", str(settings.enable_examples).lower(), env_file
-        )
-        update_lite_settings("XLWINGS_ENVIRONMENT", settings.environment, env_file)
-        update_lite_settings(
-            "XLWINGS_ENABLE_TESTS", str(settings.enable_tests).lower(), env_file
-        )
-        update_lite_settings(
-            "XLWINGS_FUNCTIONS_NAMESPACE", settings.functions_namespace, env_file
-        )
+        env_file = this_dir / "app" / "lite" / ".env"
+        create_lite_settings(settings, env_file)
 
-        ssl_keyfile_path = Path("certs/localhost+2-key.pem")
-        ssl_certfile_path = Path("certs/localhost+2.pem")
+        ssl_keyfile_path = this_dir / "certs" / "localhost+2-key.pem"
+        ssl_certfile_path = this_dir / "certs" / "localhost+2.pem"
 
         ssl_keyfile = (
             str(ssl_keyfile_path)
@@ -358,8 +383,8 @@ if __name__ == "__main__":
             host="127.0.0.1",
             port=8000,
             reload=True,
+            reload_dirs=[this_dir],
             reload_includes=[".env"],
-            reload_excludes=None if not settings.enable_lite else ["**/*.py"],
             ssl_keyfile=ssl_keyfile,
             ssl_certfile=ssl_certfile,
         )

@@ -38,7 +38,7 @@ from .myfunctions import *
 ```
 
 ```{note}
-After adding new functions or editing the function arguments, you will need to restart Excel. This is not required if you are just editing the body of an existing function.
+During development, changes to the functions will be automatically reloaded in Excel. However, in production, if your changes include adding/deleting functions or editing the function arguments, you will need to restart Excel. A restart is not required if you're just editing the body of an existing function.
 ```
 
 ## pandas DataFrames
@@ -259,7 +259,7 @@ def pytoday():
     return dt.date.today()
 ```
 
-By default, it will format the date according to the content language of your Excel instance, but you can also override this by explicitly providing the `date_format` option:
+By default, it will format the date according to the cultural info of your Excel instance, but you can also override this by explicitly providing the `date_format` option or the `XLWINGS_DATE_FORMAT` environment variable:
 
 ```python
 import datetime as dt

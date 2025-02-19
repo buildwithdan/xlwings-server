@@ -22,7 +22,11 @@ class Settings(BaseSettings):
             self.cdn_officejs = self.public_addin_store
 
     model_config = SettingsConfigDict(
-        env_prefix="XLWINGS_", env_file=os.getenv("DOTENV_PATH", ".env"), extra="ignore"
+        env_prefix="XLWINGS_",
+        env_file=os.getenv(
+            "DOTENV_PATH", Path(__file__).parent.parent.resolve() / ".env"
+        ),
+        extra="ignore",
     )
     add_security_headers: bool = True
     auth_providers: Optional[List[str]] = []
@@ -48,6 +52,7 @@ class Settings(BaseSettings):
     environment: Literal["dev", "qa", "uat", "staging", "prod"] = "prod"
     functions_namespace: str = "XLWINGS"
     hostname: Optional[str] = None
+    is_official_lite_addin: Optional[bool] = False
     cdn_pyodide: bool = True
     cdn_officejs: bool = False
     log_level: str = "INFO"
@@ -79,6 +84,7 @@ class Settings(BaseSettings):
             "appPath": self.app_path,
             "xlwingsVersion": self.xlwings_version,
             "onLite": self.enable_lite,
+            "isOfficialLiteAddin": self.is_official_lite_addin,
         }
 
 

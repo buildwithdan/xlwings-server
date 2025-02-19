@@ -32,7 +32,7 @@ globalThis.socket = io("https://127.0.0.1:8001", {
 ## Install the xlwings Python package from its repo into xlwings-server in editable mode
 
 - xlwings: delete `project.toml` temporarily
-- xlwings: replace `version = "dev"` with the version from `xlwings.js`
+- xlwings: replace `version = "dev"` with `0.0.0`
 - xlwings-server: `pip uninstall xlwings`
 - xlwings-server: `cd ~/dev/xlwings && python setup.py develop`
 - xlwings: undo deletion of `project.toml`
@@ -83,8 +83,6 @@ The VS Code extension prettier requires to set the configuration to `.prettierrc
 When debugging the alert/dialog window, you need to open up a separate instance of the dev tools.
 
 ## xlwings Lite (Wasm)
-
-Make sure to install the correct version of Pyodide (`npm i pyodide@x.x.x`) for the given version of PyScript. To find out, use the CDN version of PyScript and check out the console logs where it prints the version of Pyodide.
 
 For the offline usage of Pyodide, the following packages are always required to be copied over from the pyodide release package:
 
